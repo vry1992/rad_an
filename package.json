@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "deploy": "next build && next export && gh-pages -d out"
+   "deploy": "next build && gh-pages -d out"
   },
   "dependencies": {
     "@ant-design/cssinjs": "^1.23.0",
