@@ -4,7 +4,6 @@ import { WorkSheet } from 'xlsx';
 
 const CELL_NAME_REGEXP = new RegExp('([A-Z]{1,4})([0-9]{1,3})$');
 const TIME_HEADER_CELL_REGEXP = new RegExp('^([A-Z]{1,4})2$');
-const TIME_PARSE_REGEXP = new RegExp('^([0-2]?[0-9]):([0-9][0-9])$');
 const AMOUNT_OF_HOURS_IN_DAY = 24;
 const OBJECT_FIRST_ROW = 4;
 const SKIP_COLUMNS = ['A', 'B'];
@@ -125,7 +124,6 @@ class XlsxParser {
   }
 
   parseWorking() {
-    console.log(this.timeColumns);
     const result = [];
     const data = this.book!.Sheets[SHEET_NAME];
     for (let i = OBJECT_FIRST_ROW; i < this.maxRow; i++) {
@@ -137,9 +135,9 @@ class XlsxParser {
 
       let currentTime: WorkSheet | null = null;
       let currentDay: Date | 'placeholder' | null = null;
-      let dates: string[] = [];
+      const dates: string[] = [];
       const rowResult = this.getColumnKeys().reduce(
-        (acc, curr): any => {
+        (acc, curr) => {
           if (curr && SKIP_COLUMNS.includes(curr)) {
             return acc;
           }

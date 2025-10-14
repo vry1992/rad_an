@@ -1,5 +1,5 @@
 import { xlsxParser } from '@/services/xlsx-parser';
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 
 import React from 'react';
 
@@ -8,7 +8,7 @@ const hoursArr = [
   21, 23, 24,
 ];
 
-function normalizeHours(value: any) {
+function normalizeHours(value: number) {
   const hour = Math.floor(value);
   const padded = hour.toString().padStart(2, '0');
   return `${padded}:00`;
@@ -31,7 +31,7 @@ export default function Home() {
     }>
   >([]);
 
-  const handleFile = (e: any) => {
+  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files[0];
     if (!file || !file) {
     }
@@ -53,13 +53,7 @@ export default function Home() {
       <div style={{ display: 'flex' }}>
         <div>
           <input type="file" onChange={handleFile} accept=".xlsx, .xlsm" />
-          <div
-            style={
-              {
-                // display: 'flex',
-                // justifyContent: 'center',
-              }
-            }>
+          <div>
             {data.map((rls, i) => {
               return (
                 <>
@@ -152,6 +146,7 @@ export default function Home() {
             if (!rls.name) return null;
             return (
               <a
+                key={`___${i}___${rls.name}`}
                 href={`#${i}`}
                 style={{
                   textAlign: 'center',
