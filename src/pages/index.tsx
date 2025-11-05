@@ -47,6 +47,10 @@ export default function Home() {
   const [pending, setPending] = useState(false);
 
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
+    setData({});
+    setDisplaylist({});
+    setInActiveView({});
+
     const file = e.target.files?.[0];
     if (!file) {
       alert('Щось не так із завантаженим файлом. Не можу його прочитати!');
@@ -229,7 +233,6 @@ export default function Home() {
                         Вибрати всі
                       </button>
                     </li>
-                    {/* <li></li> */}
                   </>
                 ) : null}
                 <li
