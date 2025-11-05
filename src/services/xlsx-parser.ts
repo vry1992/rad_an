@@ -1,12 +1,8 @@
-import { addDays, format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { WorkSheet } from 'xlsx';
 
-const CELL_NAME_REGEXP = new RegExp('([A-Z]{1,4})([0-9]{1,3})$');
-const TIME_HEADER_CELL_REGEXP = new RegExp('^([A-Z]{1,4})2$');
-const AMOUNT_OF_HOURS_IN_DAY = 24;
-const OBJECT_FIRST_ROW = 4;
-const SKIP_COLUMNS = ['A', 'B'];
+const START_OF_DATE_COLUMN = 'F';
+const OBJECT_FIRST_ROW = 3;
 const SHEET_NAME = 'РЛС';
 const RLS_NAME_COLUMN = 'C';
 const RLS_LOC_NAME_COLUMN = 'D';
@@ -18,10 +14,66 @@ const RLS_NAMES_BLACKLIST = [
   'Станція КРЕО №2',
   'РЛС РТВ та ЗРВ ',
 ];
-const WORKING_COLORS = ['00BFFF', 'FFFF00', '0DC0FF'];
+
+const WORKING_COLORS = ['00BFFF', '0DC0FF'];
+const FINISH_WORKING_COLORS = ['FFFF00'];
+const ALPHABET = [
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'O',
+  'P',
+  'Q',
+  'R',
+  'S',
+  'T',
+  'U',
+  'V',
+  'W',
+  'X',
+  'Y',
+  'Z',
+];
+
+export enum WorkingStatusEnum {
+  START,
+  WORKING,
+  FINISH,
+  PENDING,
+}
+
+export type HourData = {
+  status: WorkingStatusEnum;
+  valueNum?: number;
+  value?: string;
+};
+
+export type ReadResult = {
+  [key: string]: {
+    [key: string]: HourData[];
+  };
+};
 
 class XlsxParser {
   private book: XLSX.WorkBook | null = null;
+  private mainSheet: WorkSheet | null = null;
+  private datesCells: {
+    value: string;
+    range: XLSX.Range;
+    rangeCode: string;
+    rangeCells: string[];
+  }[] = [];
   private options: XLSX.ParsingOptions = {
     type: 'array',
     sheets: SHEET_NAME,
@@ -29,173 +81,128 @@ class XlsxParser {
     sheetStubs: true,
     FS: '||||',
   };
-  private countDayChanged: number = 0;
-  private prevDay: number = 0;
-  private timeColumns: Record<string, WorkSheet> = {};
-  private dates: Array<Date | 'placeholder'> = [];
-  private maxRow: number = 0;
+  private radarNamesToCellMap: { fullName: string; row: number }[] = [];
   public maxDayOfMonth = 1;
 
-  private inputValidator() {
-    console.log();
-    if (!this.book || !this.book?.Sheets?.[SHEET_NAME]) {
-      alert('Відсутній файл, або завантажено не коректний файл');
-      throw new Error();
-    }
-  }
-
-  read(data: Uint8Array<ArrayBuffer>) {
+  // @ts-ignore
+  read(data: Uint8Array<ArrayBuffer>): ReadResult {
     const readResult = XLSX.read(data, this.options);
     this.book = readResult;
-    console.log(this.book);
-    this.collectTimeColumns();
-    this.getColumnKeys();
-    return this.parseWorking();
+    this.mainSheet = this.book!.Sheets[SHEET_NAME];
+
+    if (!this.mainSheet || !this.mainSheet['!merges']) {
+      alert('Error');
+      return {};
+    }
+
+    const dateCells = this.mainSheet['!merges']
+      .filter(
+        (item) =>
+          item.e.r === 0 && item.s.c >= ALPHABET.indexOf(START_OF_DATE_COLUMN)
+      )
+      .sort((a, b) => a.s.c - b.s.c)
+      .map((range) => {
+        const rangeCells: string[] = [];
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const letter = XLSX.utils.encode_col(C);
+          rangeCells.push(letter);
+        }
+        const dateValue =
+          this.mainSheet?.[`${XLSX.utils.encode_col(range.s.c)}1`]?.w;
+        return {
+          value: isNaN(new Date(dateValue).getTime())
+            ? `Невідома дата: ${dateValue}`
+            : dateValue,
+          range,
+          rangeCells,
+          rangeCode: XLSX.utils.encode_range(range),
+        };
+      })
+      .reduce((acc, curr) => {
+        const value = curr.value;
+
+        if (acc[value]) return acc;
+
+        return {
+          ...acc,
+          [value]: curr,
+        };
+      }, {});
+
+    this.datesCells = Object.values(dateCells);
+
+    this.go();
+    return this.run();
   }
 
-  collectTimeColumns() {
-    this.inputValidator();
-    const timeColumns: [string, WorkSheet][] = [];
-    let prevDate: Date | null = null;
-    Object.entries(this.book!.Sheets[SHEET_NAME]).forEach(
-      ([cellName, cellData]) => {
-        const isTimeHeadCell = TIME_HEADER_CELL_REGEXP.test(cellName);
-        if (cellData?.z === 'm/d/yy') {
-          console.log(cellName);
-          if (cellData.w) {
-            const date = new Date(cellData.w);
-            const isValidDate = !isNaN(date.getTime());
-            if (isValidDate) {
-              prevDate = date;
-              this.dates.push(date);
-              const placeholderIndex = this.dates.indexOf('placeholder');
-              if (placeholderIndex >= 0) {
-                const placeholderDate = addDays(date, -1);
-                this.dates[placeholderIndex] = placeholderDate;
-              }
-            } else if (!isValidDate && prevDate) {
-              const nextDate = addDays(prevDate, 1);
-              this.dates.push(nextDate);
-            }
-          } else {
-            if (prevDate) {
-              const nextDate = addDays(prevDate, 1);
-              this.dates.push(nextDate);
-            } else {
-              this.dates.push('placeholder');
-            }
-          }
-        }
-        if (cellData.z === 'h:mm' && cellData.v >= 0 && isTimeHeadCell) {
-          if (this.countDayChanged === 0) {
-            this.prevDay++;
-          }
-          this.countDayChanged++;
-          if (this.countDayChanged === AMOUNT_OF_HOURS_IN_DAY) {
-            this.countDayChanged = 0;
-          }
-          cellData.dayOfMonth = this.prevDay;
-          timeColumns.push([cellName, cellData]);
-        }
-        this.countRowsAmount(cellName);
-      }
+  go() {
+    if (!this.mainSheet || !this.mainSheet['!merges']) {
+      alert('Error');
+      return;
+    }
+    const maxRow = Number(
+      this.mainSheet['!ref']?.split(':')[1].replace(/\D/g, '')
     );
-    this.timeColumns = Object.fromEntries(timeColumns);
-    console.log(this.dates);
-  }
-
-  countRowsAmount(cellName: string) {
-    const cellRow = CELL_NAME_REGEXP.exec(cellName);
-    if (cellRow) {
-      if (+cellRow[2] > this.maxRow) {
-        this.maxRow = +cellRow[2];
+    for (let row = OBJECT_FIRST_ROW; row <= maxRow; row++) {
+      const name = this.mainSheet[`${RLS_NAME_COLUMN}${row}`]?.v;
+      const location = this.mainSheet[`${RLS_LOC_NAME_COLUMN}${row}`]?.v;
+      const isBlackListName = RLS_NAMES_BLACKLIST.some(
+        (rlsName) => rlsName?.toLowerCase() === name?.toLowerCase()
+      );
+      if (name && !isBlackListName) {
+        this.radarNamesToCellMap.push({
+          fullName: `${name}(${location})`,
+          row,
+        });
       }
     }
   }
 
-  private getColumnKeys() {
-    return [
-      ...new Set(
-        Object.keys(this.book!.Sheets[SHEET_NAME])
-          .filter((key) => CELL_NAME_REGEXP.exec(key))
-          .map((key) => CELL_NAME_REGEXP.exec(key)?.[1])
-      ),
-    ];
+  run(): ReadResult {
+    return this.radarNamesToCellMap.reduce((accName, { fullName, row }) => {
+      const dataForDate = this.datesCells.reduce(
+        (accDates, { value, rangeCells }) => {
+          const datesData = rangeCells.map((col) => {
+            return this.parseWorking(this.mainSheet?.[`${col}${row}`]);
+          });
+
+          return { ...accDates, [value]: datesData };
+        },
+        {}
+      );
+
+      return {
+        ...accName,
+        [fullName]: dataForDate,
+      };
+    }, {});
   }
 
-  parseWorking() {
-    const result = [];
-    const data = this.book!.Sheets[SHEET_NAME];
-    for (let i = OBJECT_FIRST_ROW; i < this.maxRow; i++) {
-      const name: string | undefined =
-        data[`${RLS_NAME_COLUMN}${i}`]?.v +
-        ' ' +
-        data[`${RLS_LOC_NAME_COLUMN}${i}`]?.v;
-      if (!name || RLS_NAMES_BLACKLIST.includes(name)) continue;
+  parseWorking(cell: XLSX.CellObject) {
+    const fgColor: string = cell?.s?.fgColor?.rgb || '';
 
-      let currentTime: WorkSheet | null = null;
-      let currentDay: Date | 'placeholder' | null = null;
-      const dates: string[] = [];
-      const rowResult = this.getColumnKeys().reduce(
-        (acc, curr) => {
-          if (curr && SKIP_COLUMNS.includes(curr)) {
-            return acc;
-          }
-          if (this.timeColumns[`${curr}2`]) {
-            currentTime = this.timeColumns[`${curr}2`];
-            currentDay = this.dates[currentTime.dayOfMonth - 1];
-          } else {
-            return acc;
-          }
+    let status = WorkingStatusEnum.PENDING;
 
-          const color = data[`${curr}${i}`]?.s?.fgColor?.rgb;
-          const isWorking = WORKING_COLORS.includes(color);
+    const isStartStatus =
+      cell?.v && WORKING_COLORS.includes(fgColor.toUpperCase());
 
-          if (!currentDay) {
-            return acc;
-          }
+    if (isStartStatus) status = WorkingStatusEnum.START;
 
-          const date = format(currentDay as Date, 'dd.LL.yyyy');
+    const isWorkingStatus =
+      !cell?.v && WORKING_COLORS.includes(fgColor.toUpperCase());
 
-          if (!dates.includes(date)) {
-            dates.push(date);
-          }
-          acc.name = name;
-          const workingForThisDate = acc.working.get(date) || [];
-          acc.working.set(date, [
-            ...workingForThisDate,
-            {
-              isWorking,
-              currentTime: currentTime?.w,
-              currentDay: format(currentDay as Date, 'dd.LL.yyyy'),
-              cellId: `${curr}${i}`,
-              key: dates.length,
-            },
-          ]);
+    if (isWorkingStatus) status = WorkingStatusEnum.WORKING;
 
-          if (currentTime?.w === '23:00') {
-            acc.working.set(date, [
-              ...acc.working.get(date),
-              {
-                isWorking,
-                currentTime: '24:00',
-                currentDay: format(currentDay as Date, 'dd.LL.yyyy'),
-                cellId: `${curr}${i}`,
-                key: dates.length,
-              },
-            ]);
-          }
+    const isFinishWorkingStatus =
+      cell?.v && FINISH_WORKING_COLORS.includes(fgColor.toUpperCase());
 
-          return acc;
-        },
-        {
-          name: '',
-          working: new Map(),
-        }
-      );
-      result[i] = rowResult;
-    }
-    return result.filter(Boolean);
+    if (isFinishWorkingStatus) status = WorkingStatusEnum.FINISH;
+
+    return {
+      status,
+      valueNum: cell?.v,
+      value: cell?.w,
+    };
   }
 }
 
