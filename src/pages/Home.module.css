@@ -1,0 +1,56 @@
+.exportTable {
+  display: block;
+  padding: 20px;
+}
+
+.hidden {
+  display: none;
+}
+
+.table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.hoursCell {
+  width: 40px;
+  height: 40px;
+  border: 1px solid black;
+  background: #00000050;
+}
+
+.dateCell {
+  text-align: right;
+  padding-right: 3;
+}
+
+.mainCell {
+  width: 40px;
+  height: 15px;
+  border: 1px solid black;
+}
+
+.linkCheckbox {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  margin: 0 10 0 0 
+}
+
+.linkList {
+  width: 20%;
+  position: fixed;
+  right: 10px;
+  top: 0px;
+  list-style: none;
+  height: 1000px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #ccc;
+  padding: 10px;
+  scroll-behavior: smooth;
+}
+
+.active {
+  background: #00ff0050;
+}
