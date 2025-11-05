@@ -213,8 +213,7 @@ export default function Home() {
                         }}>
                         Зняти всі
                       </button>
-                    </li>
-                    <li>
+                      {'  '}
                       <button
                         type="button"
                         name={radarName}
@@ -230,6 +229,7 @@ export default function Home() {
                         Вибрати всі
                       </button>
                     </li>
+                    {/* <li></li> */}
                   </>
                 ) : null}
                 <li
